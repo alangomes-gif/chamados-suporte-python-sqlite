@@ -28,6 +28,12 @@ class TestPersistenciaCLI(unittest.TestCase):
             self.assertEqual(consulta.returncode, 0, consulta.stderr)
             self.assertIn('1 | Impressora fictícia sem conexão | alta | resolvido', consulta.stdout)
             self.assertTrue(banco.is_file())
+            eventos = executar('historico', '1')
+            self.assertEqual(eventos.returncode, 0, eventos.stderr)
+            linhas = eventos.stdout.strip().splitlines()
+            self.assertEqual(len(linhas), 2)
+            self.assertTrue(linhas[0].startswith('aberto | em_atendimento | '))
+            self.assertTrue(linhas[1].startswith('em_atendimento | resolvido | '))
 
 if __name__ == '__main__':
     unittest.main()

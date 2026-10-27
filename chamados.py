@@ -10,6 +10,7 @@ ESTADOS = {'aberto': {'em_atendimento'}, 'em_atendimento': {'resolvido'}, 'resol
 def conectar(banco):
     conn = sqlite3.connect(banco)
     conn.execute('CREATE TABLE IF NOT EXISTS chamados (id INTEGER PRIMARY KEY, titulo TEXT NOT NULL, prioridade TEXT NOT NULL CHECK(prioridade IN (\'baixa\',\'media\',\'alta\')), estado TEXT NOT NULL DEFAULT \'aberto\' CHECK(estado IN (\'aberto\',\'em_atendimento\',\'resolvido\')), criado_em TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS historico (id INTEGER PRIMARY KEY, chamado_id INTEGER NOT NULL, estado_anterior TEXT NOT NULL, estado_novo TEXT NOT NULL, alterado_em TEXT NOT NULL)')
     conn.commit()
     return conn
 
@@ -36,6 +37,11 @@ def transicionar(conn, identificador, destino):
         resultado = conn.execute('UPDATE chamados SET estado=? WHERE id=? AND estado=?', (destino, identificador, atual))
         if resultado.rowcount != 1:
             raise ValueError('Chamado alterado por outra operação')
+        conn.execute('INSERT INTO historico(chamado_id,estado_anterior,estado_novo,alterado_em) VALUES(?,?,?,?)', (identificador, atual, destino, datetime.now(timezone.utc).isoformat()))
+
+
+def historico(conn, identificador):
+    return conn.execute('SELECT estado_anterior,estado_novo,alterado_em FROM historico WHERE chamado_id=? ORDER BY id', (identificador,)).fetchall()
 
 
 def listar(conn):
@@ -53,6 +59,8 @@ def main():
     mudar.add_argument('id', type=int)
     mudar.add_argument('estado', choices=list(ESTADOS))
     sub.add_parser('listar')
+    consulta = sub.add_parser('historico')
+    consulta.add_argument('id', type=int)
     args = parser.parse_args()
     with closing(conectar(args.banco)) as conn:
         try:
@@ -61,6 +69,9 @@ def main():
             elif args.comando == 'mover':
                 transicionar(conn, args.id, args.estado)
                 print('Estado atualizado')
+            elif args.comando == 'historico':
+                for linha in historico(conn, args.id):
+                    print(' | '.join(map(str, linha)))
             else:
                 for linha in listar(conn):
                     print(' | '.join(map(str, linha)))
